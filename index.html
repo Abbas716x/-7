@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#070b19">
+    <meta name="description" content="نظام إدارة العيادات والمراكز الطبية الذكي - بوابة الإدارة والأطباء">
+    <title>MEDINEXUS PRO | Clinic Management System</title>
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800;900&family=Orbitron:wght@600;700;800;900&family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Firebase Compat SDKs (v10.12.0) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+
+    <!-- Master Stylesheet -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body class="select-none overflow-x-hidden antialiased text-white bg-[#070b19]">
+
+    <!-- 3D Canvas Background Layer -->
+    <canvas id="space-canvas"></canvas>
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+    <div class="bg-grid-medical"></div>
+    <div class="bg-vignette"></div>
+
+    <!-- Toast Notification Dispatcher -->
+    <div id="toast-wrap"></div>
+
+    <!-- ==================== 1. GLOBAL LOGIN GATEWAY ==================== -->
+    <div id="global-login-gate" class="global-login-overlay">
+        <div class="glass-login-box p-8 max-w-md w-full mx-4 text-center relative overflow-hidden">
+            <div class="w-20 h-20 rounded-3xl bg-gradient-to-tr from-cyan-400 to-blue-600 mx-auto flex items-center justify-center text-4xl shadow-2xl shadow-cyan-500/40 mb-4 animate-pulse">
+                🩺
+            </div>
+            <h2 class="text-2xl font-black text-white font-orbitron tracking-wider">MEDINEXUS PRO</h2>
+            <p class="text-xs text-cyan-400 font-mono mt-1 mb-6">CLINIC ACCESS GATEWAY</p>
+
+            <form id="global-login-form" onsubmit="event.preventDefault(); window.ClinicEngine.handleGlobalLogin();" class="text-right">
+                <div class="mb-4">
+                    <label class="lbl">اسم المستخدم / المعرف (Username)</label>
+                    <input type="text" id="login-username" class="inp font-bold" placeholder="أدخل اسم المستخدم" required autofocus autocomplete="off">
+                </div>
+                <div class="mb-6">
+                    <label class="lbl">كلمة المرور (Password)</label>
+                    <input type="password" id="login-password" class="inp font-mono" placeholder="••••••••" required autocomplete="off">
+                </div>
+                <button type="submit" id="btn-login-submit" class="btn btn-primary w-full py-4 text-base font-bold shadow-lg shadow-cyan-500/30">
+                    دخول إلى النظام
+                </button>
+            </form>
+            <div class="mt-4 pt-4 border-t border-white/10 text-[11px] text-gray-400 font-tajawal">
+                النظام محمي ببروتوكولات الأمان السحابية والتحقق المزدوج
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 2. MAIN APPLICATION SHELL ==================== -->
+    <div id="app-shell" class="hidden">
+        <!-- Master Header Navigation -->
+        <header class="app-header">
+            <div class="flex items-center justify-between p-3.5 px-4 md:px-8">
+                <div class="flex items-center gap-4">
+                    <button id="btn-hamburger" class="hamburger" onclick="window.ClinicEngine.openDrawer()" aria-label="القائمة">
+                        <span></span><span></span><span></span>
+                    </button>
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-xl shadow-lg shadow-cyan-500/30">
+                            🩺
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h1 class="text-lg md:text-xl font-black tracking-wider text-white font-orbitron leading-none">
+                                    MEDI<span class="text-cyan-400">NEXUS</span>
+                                </h1>
+                                <span id="header-role-badge" class="badge badge-cyan text-[10px] py-0.5 px-2">لوحة الإدارة</span>
+                            </div>
+                            <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                <span class="pulse-dot"></span>
+                                <span id="live-clock" class="text-[11px] font-mono tracking-wider text-cyan-300">--:--:--</span>
+                                <span id="fb-status" class="fb-status sync" title="حالة الاتصال السحابي">
+                                    <span class="fb-dot"></span>
+                                    <span id="fb-status-text">CONNECTING</span>
+                                </span>
+                                <span id="session-user-display" class="text-[11px] text-gray-400 font-mono hidden md:inline-block">المستخدم: —</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Header Actions -->
+                <div class="flex items-center gap-2.5">
+                    <button class="btn btn-ghost text-xs py-2 px-3.5 text-pink-400 border-pink-500/30" onclick="window.ClinicEngine.handleGlobalLogout()">
+                        <span>🚪</span>
+                        <span class="hidden sm:inline">تسجيل الخروج</span>
+                    </button>
+                    <button id="btn-header-action" class="btn btn-primary text-xs py-2 px-4" onclick="window.ClinicEngine.headerQuickAction()">
+                        <span>+</span>
+                        <span id="btn-header-label">إجراء</span>
+                    </button>
+                </div>
+            </div>
+            <div class="header-bar"></div>
+        </header>
+
+        <!-- Off-Canvas Drawer (Admin Navigation) -->
+        <div id="drawer-overlay" class="drawer-overlay" onclick="window.ClinicEngine.closeDrawer()"></div>
+        <aside id="drawer" class="drawer">
+            <div class="flex items-center justify-between mb-7">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center font-black text-2xl shadow-lg shadow-cyan-500/40">
+                        M
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-black tracking-wider text-white font-orbitron">MEDINEXUS PRO</h2>
+                        <span class="text-[10px] font-mono tracking-widest text-cyan-400">CONTROL ARCHITECTURE</span>
+                    </div>
+                </div>
+                <button onclick="window.ClinicEngine.closeDrawer()" class="w-8 h-8 rounded-xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-colors">✕</button>
+            </div>
+
+            <div class="glass mb-6 p-4 text-xs">
+                <div class="flex items-center justify-between mb-1 font-mono text-cyan-400 font-bold">
+                    <span>⚡ SYSTEM STATUS:</span>
+                    <span class="text-emerald-400 font-bold">ARMED & ACTIVE</span>
+                </div>
+                <p class="text-gray-400 text-[11px] leading-relaxed">
+                    نظام مراقبة الخروقات الأمنية ومزامنة الجلسات نشط لحظياً.
+                </p>
+            </div>
+
+            <nav class="flex flex-col gap-2 flex-1">
+                <button class="nav-item active" data-view="admin-dashboard" onclick="window.ClinicEngine.switchAdminView('admin-dashboard')">
+                    <span class="nav-icon">📊</span><span class="flex-1 text-right">الرئيسية والمالية</span>
+                </button>
+                <button class="nav-item" data-view="admin-doctors" onclick="window.ClinicEngine.switchAdminView('admin-doctors')">
+                    <span class="nav-icon">👨‍⚕️</span><span class="flex-1 text-right">إدارة الأطباء والجلسات</span>
+                </button>
+                <button class="nav-item" data-view="admin-treatments" onclick="window.ClinicEngine.switchAdminView('admin-treatments')">
+                    <span class="nav-icon">💉</span><span class="flex-1 text-right">كتالوج العلاجات المركزي</span>
+                </button>
+                <button class="nav-item" data-view="admin-debts" onclick="window.ClinicEngine.switchAdminView('admin-debts')">
+                    <span class="nav-icon">📒</span><span class="flex-1 text-right">سجل الديون والمستحقات</span>
+                </button>
+                <!-- NEW SECTION: الحركات والنشاطات والخروقات -->
+                <button class="nav-item" data-view="admin-activities" onclick="window.ClinicEngine.switchAdminView('admin-activities')">
+                    <span class="nav-icon">⚡</span><span class="flex-1 text-right">سجل الحركات والأمان</span>
+                </button>
+                <button class="nav-item" data-view="admin-sessions" onclick="window.ClinicEngine.switchAdminView('admin-sessions')">
+                    <span class="nav-icon">📑</span><span class="flex-1 text-right">سجل جلسات المرضى الكامل</span>
+                </button>
+            </nav>
+
+            <div class="mt-6 pt-5 border-t border-white/10 flex flex-col gap-2">
+                <button class="btn btn-danger w-full text-xs" onclick="window.ClinicEngine.handleGlobalLogout()">
+                    🚪 تسجيل الخروج
+                </button>
+            </div>
+        </aside>
+
+        <!-- ==================== MAIN WORKSPACE ==================== -->
+        <main class="p-4 md:p-8 max-w-7xl mx-auto pb-24">
+
+            <!-- ==================== 1. ADMIN DASHBOARD ==================== -->
+            <div id="section-admin-portal" class="portal-section active">
+
+                <!-- VIEW: Financial Overview -->
+                <section id="view-admin-dashboard" class="admin-view active">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                        <div>
+                            <span class="stat-tag text-cyan-400 border-cyan-400">◆ COMMAND.01</span>
+                            <h2 class="text-2xl md:text-4xl font-black text-white mt-2">المركز المالي والإيرادات</h2>
+                            <p class="text-gray-400 text-sm mt-1">متابعة الإيراد اليومي، الشهري، وترحيل الأرصدة</p>
+                        </div>
+                        <button class="btn btn-success" onclick="window.ClinicEngine.transferDailyRevenue()">
+                            <span>⟳</span>
+                            <span>الترحيل اليومي (تصفير اليوم ← الشهري)</span>
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+                        <div class="stat-card stat-emerald">
+                            <span class="stat-tag">TODAY.REVENUE</span>
+                            <div class="stat-num" id="stat-daily-rev">0</div>
+                            <div class="flex items-center justify-between mt-3 font-mono">
+                                <span class="stat-unit">IQD</span>
+                                <span class="stat-unit text-emerald-400">● مباشر اليوم</span>
+                            </div>
+                        </div>
+                        <div class="stat-card stat-cyan">
+                            <span class="stat-tag">MONTHLY.REVENUE</span>
+                            <div class="stat-num" id="stat-monthly-rev">0</div>
+                            <div class="flex items-center justify-between mt-3 font-mono">
+                                <span class="stat-unit">IQD</span>
+                                <span class="stat-unit text-cyan-400">تراكمي الشهر</span>
+                            </div>
+                        </div>
+                        <div class="stat-card stat-pink">
+                            <span class="stat-tag">OUTSTANDING.DEBTS</span>
+                            <div class="stat-num" id="stat-debts-total">0</div>
+                            <div class="flex items-center justify-between mt-3 font-mono">
+                                <span class="stat-unit">IQD</span>
+                                <span class="stat-unit text-pink-500">إجمالي الديون</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Debt Registry Section -->
+                    <div class="glass p-6 mb-8">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5 pb-4 border-b border-white/10">
+                            <div class="flex items-center gap-3">
+                                <div class="text-2xl">📒</div>
+                                <div>
+                                    <h3 class="text-lg font-black text-white font-tajawal">سجل الديون والمستحقات المالية</h3>
+                                    <p class="text-xs text-gray-400">المرضى المترتب عليهم ذمم مالية غير مسددة</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 w-full sm:w-auto">
+                                <input type="text" id="search-debts-inp" class="inp sm:w-64 text-xs" placeholder="⌕ ابحث بالمريض أو الهاتف..." oninput="window.ClinicEngine.filterDebts(this.value)">
+                                <button class="btn btn-ghost text-xs py-2 px-3 whitespace-nowrap" onclick="window.ClinicEngine.openAddDebtModal()">+ قيد دين</button>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto no-scrollbar">
+                            <table class="w-full text-right text-xs">
+                                <thead class="bg-black/40 border-b border-cyan-500/20 text-cyan-400 font-mono">
+                                    <tr>
+                                        <th class="p-3.5">اسم المريض</th>
+                                        <th class="p-3.5">رقم الهاتف</th>
+                                        <th class="p-3.5">المبلغ المتبقي</th>
+                                        <th class="p-3.5">تاريخ القيد</th>
+                                        <th class="p-3.5">الحالة</th>
+                                        <th class="p-3.5 text-center">إجراءات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="debts-table-body" class="divide-y divide-white/5 font-tajawal">
+                                    <tr><td colspan="6" class="p-8 text-center text-gray-500">جارِ التحميل...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW: Doctors Management & Control Center -->
+                <section id="view-admin-doctors" class="admin-view">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                        <div>
+                            <span class="stat-tag text-emerald-400 border-emerald-400">◆ COMMAND.02</span>
+                            <h2 class="text-2xl md:text-4xl font-black text-white mt-2">إدارة الأطباء والجلسات</h2>
+                            <p class="text-gray-400 text-sm mt-1">التحكم بحسابات الأطباء، إيقاف/تجميد الجلسات، واستعراض المرضى</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="window.ClinicEngine.openAddDoctorModal()">
+                            <span>+</span> إضافة حساب طبيب جديد
+                        </button>
+                    </div>
+                    <div id="doctors-cards-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+                </section>
+
+                <!-- VIEW: Central Treatments Catalog -->
+                <section id="view-admin-treatments" class="admin-view">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                        <div>
+                            <span class="stat-tag text-fuchsia-400 border-fuchsia-400">◆ COMMAND.03</span>
+                            <h2 class="text-2xl md:text-4xl font-black text-white mt-2">كتالوج العلاجات المركزي</h2>
+                            <p class="text-gray-400 text-sm mt-1">تحديد العلاجات والأسعار؛ تتزامن فورياً مع هواتف الأطباء</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="window.ClinicEngine.openAddTreatmentModal()">
+                            <span>+</span> إضافة علاج جديد
+                        </button>
+                    </div>
+                    <div class="glass p-6">
+                        <div class="overflow-x-auto no-scrollbar">
+                            <table class="w-full text-right text-xs">
+                                <thead class="bg-black/40 border-b border-cyan-500/20 text-cyan-400 font-mono">
+                                    <tr>
+                                        <th class="p-4">اسم العلاج / الخدمة</th>
+                                        <th class="p-4">السعر الافتراضي</th>
+                                        <th class="p-4">تاريخ الإضافة</th>
+                                        <th class="p-4 text-center">إجراءات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="treatments-table-body" class="divide-y divide-white/5 font-tajawal"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW: Debts Ledger -->
+                <section id="view-admin-debts" class="admin-view">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                        <div>
+                            <span class="stat-tag text-pink-500 border-pink-500">◆ COMMAND.04</span>
+                            <h2 class="text-2xl md:text-4xl font-black text-white mt-2">سجل الديون والمستحقات</h2>
+                            <p class="text-gray-400 text-sm mt-1">إدارة الذمم المالية وتسديد الديون</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="window.ClinicEngine.openAddDebtModal()">+ تسجيل دين جديد</button>
+                    </div>
+                    <div class="glass p-6" id="full-debts-container"></div>
+                </section>
+
+                <!-- NEW SECTION: قسم الحركات والأمان والنشاطات (Real-Time Movements & Activities) -->
+                <section id="view-admin-activities" class="admin-view">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                        <div>
+                            <span class="stat-tag text-amber-400 border-amber-400">◆ COMMAND.05</span>
+                            <h2 class="text-2xl md:text-4xl font-black text-white mt-2">سجل الحركات والأمان (Activities)</h2>
+                            <p class="text-gray-400 text-sm mt-1">مراقبة فورية لنشاط الأطباء، إضافة المرضى، ورصد أي محاولات فحص أو اختراق</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="badge badge-emerald">بث سحابي حي ●</span>
+                        </div>
+                    </div>
+
+                    <div class="glass p-6">
+                        <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                            <span class="font-bold text-white text-sm">النشاطات المسجلة حديثاً:</span>
+                            <div class="flex gap-2">
+                                <button class="btn btn-ghost py-1 px-3 text-xs" onclick="window.ClinicEngine.filterActivities('all')">الكل</button>
+                                <button class="btn btn-ghost py-1 px-3 text-xs text-rose-400 border-rose-500/30" onclick="window.ClinicEngine.filterActivities('breach')">🚨 الخروقات الأمنية</button>
+                                <button class="btn btn-ghost py-1 px-3 text-xs text-cyan-400 border-cyan-500/30" onclick="window.ClinicEngine.filterActivities('session')">🩺 جلسات الأطباء</button>
+                            </div>
+                        </div>
+
+                        <div id="activities-log-container" class="space-y-2.5 max-h-[65vh] overflow-y-auto no-scrollbar font-tajawal">
+                            <div class="p-8 text-center text-gray-500 text-xs">جارِ مزامنة سجل الحركات...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW: Full Sessions History -->
+                <section id="view-admin-sessions" class="admin-view">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                        <div>
+                            <span class="stat-tag text-cyan-400 border-cyan-400">◆ COMMAND.06</span>
+                            <h2 class="text-2xl md:text-4xl font-black text-white mt-2">سجل الجلسات الكامل</h2>
+                            <p class="text-gray-400 text-sm mt-1">كافة جلسات المرضى المسجلة من الأطباء</p>
+                        </div>
+                        <button class="btn btn-ghost text-xs py-2 px-3" onclick="window.ClinicEngine.exportSessionsCSV()">📊 تصدير Excel (CSV)</button>
+                    </div>
+                    <div class="glass p-6">
+                        <div class="overflow-x-auto no-scrollbar">
+                            <table class="w-full text-right text-xs">
+                                <thead class="bg-black/40 border-b border-cyan-500/20 text-cyan-400 font-mono">
+                                    <tr>
+                                        <th class="p-3.5">المريض</th>
+                                        <th class="p-3.5">الهاتف</th>
+                                        <th class="p-3.5">الطبيب المعالج</th>
+                                        <th class="p-3.5">نوع العلاج</th>
+                                        <th class="p-3.5">المبلغ المدفوع</th>
+                                        <th class="p-3.5">الجلسة الأولى</th>
+                                        <th class="p-3.5">الجلسة الثانية</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="all-sessions-table-body" class="divide-y divide-white/5 font-tajawal"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ==================== 2. DOCTOR MOBILE PORTAL ==================== -->
+            <div id="section-doctor-portal" class="portal-section">
+
+                <!-- Doctor Dashboard View -->
+                <div id="doctor-view-dashboard" class="max-w-xl mx-auto">
+                    <div class="glass-doctor-card p-6 mb-5 relative">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3.5">
+                                <div class="w-13 h-13 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-3xl">
+                                    🩺
+                                </div>
+                                <div>
+                                    <h3 id="doc-active-name" class="text-xl font-black text-white font-tajawal">—</h3>
+                                    <p id="doc-active-phone" class="text-xs text-cyan-400 font-mono mt-0.5">—</p>
+                                </div>
+                            </div>
+                            <button class="btn btn-ghost py-1.5 px-3 text-xs text-red-400 border-red-500/30" onclick="window.ClinicEngine.handleGlobalLogout()">خروج</button>
+                        </div>
+
+                        <!-- Stats -->
+                        <div class="grid grid-cols-2 gap-3 mt-5 pt-4 border-t border-white/10 font-mono">
+                            <div class="p-3 rounded-xl bg-black/40 border border-white/5">
+                                <span class="text-[10px] text-gray-400 block mb-0.5">إيرادك اليوم:</span>
+                                <span id="doc-stat-today-revenue" class="text-lg font-black text-emerald-400">0</span>
+                                <span class="text-[9px] text-gray-400">IQD</span>
+                            </div>
+                            <div class="p-3 rounded-xl bg-black/40 border border-white/5">
+                                <span class="text-[10px] text-gray-400 block mb-0.5">مرضى اليوم:</span>
+                                <span id="doc-stat-today-patients" class="text-lg font-black text-cyan-400">0</span>
+                                <span class="text-[9px] text-gray-400">مراجع</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Add Patient Big Call-to-Action -->
+                    <button class="btn btn-primary w-full py-4 text-base font-black shadow-xl shadow-cyan-500/30 mb-6 flex items-center justify-center gap-3" onclick="window.ClinicEngine.openAddPatientFullScreen()">
+                        <span class="text-2xl leading-none">+</span>
+                        <span>إضافة مراجع / جلسة علاجية جديدة</span>
+                    </button>
+
+                    <!-- Assigned Patients List -->
+                    <div class="glass-doctor-card p-5">
+                        <h4 class="font-bold text-white text-sm mb-4 flex items-center gap-2">
+                            <span class="text-cyan-400">▸</span> سجل مرضى وجلسات اليوم
+                        </h4>
+                        <div id="doctor-patients-list" class="space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar"></div>
+                    </div>
+                </div>
+
+                <!-- Full-Screen Add Patient Flow (شاشة كاملة وزر رجوع بارز) -->
+                <div id="doctor-view-add-patient" class="full-screen-flow hidden">
+                    <div class="max-w-xl mx-auto px-4 py-6">
+                        <div class="flex items-center justify-between mb-6 pb-4 border-b border-cyan-500/20">
+                            <button class="back-btn" onclick="window.ClinicEngine.closeAddPatientFullScreen()">
+                                <span class="text-xl">→</span>
+                                <span class="font-bold">رجوع للوحة التحكم</span>
+                            </button>
+                            <span class="badge badge-cyan text-xs">إضافة مراجع</span>
+                        </div>
+
+                        <div class="glass-doctor-card p-6 md:p-8">
+                            <div class="text-center mb-6">
+                                <div class="text-4xl mb-2">📋</div>
+                                <h3 class="text-2xl font-black text-white font-tajawal">تسجيل جلسة مراجع جديدة</h3>
+                                <p class="text-gray-400 text-xs mt-1 font-tajawal">سيتم حفظ الجلسة وفتح محادثة واتساب مع المريض فوراً</p>
+                            </div>
+
+                            <form id="add-patient-form" onsubmit="event.preventDefault(); window.ClinicEngine.submitPatientSession();">
+                                <div class="mb-4 text-right">
+                                    <label class="lbl">اسم المريض الكامل (Patient Name) *</label>
+                                    <input type="text" id="pt-name" class="inp font-bold" placeholder="مثال: سيف عبد الله" required>
+                                </div>
+
+                                <div class="mb-4 text-right">
+                                    <label class="lbl">رقم هاتف المريض (WhatsApp Phone) *</label>
+                                    <input type="tel" id="pt-phone" class="inp font-mono" placeholder="07XXXXXXXXX" required>
+                                </div>
+
+                                <div class="mb-4 text-right">
+                                    <label class="lbl">نوع العلاج (Treatment Type) *</label>
+                                    <select id="pt-treatment-select" class="inp font-tajawal" onchange="window.ClinicEngine.onTreatmentSelectChange(this.value)" required>
+                                        <option value="">-- اختر نوع العلاج من الكتالوج المركزي --</option>
+                                    </select>
+                                </div>
+
+                                <div class="mb-5 text-right">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label class="lbl mb-0">السعر الفعلي / تعديل السعر (IQD) *</label>
+                                        <span id="pt-base-price-hint" class="text-[10px] text-cyan-400 font-mono">السعر الافتراضي: 0</span>
+                                    </div>
+                                    <input type="number" id="pt-final-price" class="inp font-mono text-emerald-400 font-black text-lg" placeholder="0" min="0" required>
+                                </div>
+
+                                <div class="mb-7 text-right">
+                                    <label class="lbl">موعد الجلسة الثانية (التاريخ والوقت) *</label>
+                                    <input type="datetime-local" id="pt-session2-date" class="inp font-mono text-cyan-300" required>
+                                </div>
+
+                                <button type="submit" id="btn-submit-patient" class="btn btn-success w-full py-4 text-base font-black shadow-xl shadow-emerald-500/30">
+                                    ✓ حفظ الجلسة وإرسال إشعار WhatsApp فوراً
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- ==================== SYSTEM MODALS ==================== -->
+
+    <!-- Modal: Add New Doctor Account -->
+    <div id="modal-add-doctor" class="modal-bd">
+        <div class="glass-doctor-card p-7 max-w-md w-full relative">
+            <button onclick="window.ClinicEngine.closeModal('modal-add-doctor')" class="absolute top-4 left-4 w-8 h-8 rounded-xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-colors">✕</button>
+            <div class="mb-5 text-right">
+                <span class="badge badge-emerald">◆ حساب جديد</span>
+                <h3 class="text-2xl font-black text-white mt-1.5 font-tajawal">إضافة طبيب للمنظومة</h3>
+            </div>
+            <form onsubmit="event.preventDefault(); window.ClinicEngine.confirmCreateDoctor();">
+                <label class="lbl">اسم الطبيب الكامل</label>
+                <input type="text" id="new-doc-name" class="inp mb-3 font-bold" placeholder="د. علي أحمد" required>
+                <label class="lbl">رقم هاتف الطبيب</label>
+                <input type="tel" id="new-doc-phone" class="inp mb-3 font-mono" placeholder="07XXXXXXXXX" required>
+                <label class="lbl">اسم المستخدم (Username للدخول)</label>
+                <input type="text" id="new-doc-username" class="inp mb-3 font-mono" placeholder="dr_ali" required>
+                <label class="lbl">كلمة المرور الفرعية (Sub-Password)</label>
+                <input type="password" id="new-doc-password" class="inp mb-6 font-mono" placeholder="••••••••" required>
+                <button type="submit" class="btn btn-primary w-full py-3.5 text-sm font-bold">✓ إنشاء وتفعيل الحساب</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Doctor Details & Sessions -->
+    <div id="modal-doctor-details" class="modal-bd">
+        <div class="glass-doctor-card p-7 max-w-2xl w-full max-h-[88vh] overflow-y-auto no-scrollbar relative">
+            <button onclick="window.ClinicEngine.closeModal('modal-doctor-details')" class="absolute top-4 left-4 w-8 h-8 rounded-xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-colors">✕</button>
+            <div class="flex items-center justify-between mb-5 pb-4 border-b border-white/10">
+                <div>
+                    <h3 id="modal-doc-title-name" class="text-2xl font-black text-white font-tajawal">—</h3>
+                    <p id="modal-doc-title-user" class="text-xs text-cyan-400 font-mono mt-0.5">—</p>
+                </div>
+                <div class="text-left font-mono">
+                    <span class="text-xs text-gray-400 block">إيراد اليوم:</span>
+                    <span id="modal-doc-today-rev" class="text-xl font-black text-emerald-400">0 IQD</span>
+                </div>
+            </div>
+            <h4 class="font-bold text-white text-sm mb-3">سجل المرضى الخاص بالطبيب:</h4>
+            <div id="modal-doc-patients-list" class="space-y-2.5 max-h-72 overflow-y-auto no-scrollbar"></div>
+        </div>
+    </div>
+
+    <!-- Modal: Add Treatment -->
+    <div id="modal-add-treatment" class="modal-bd">
+        <div class="glass-doctor-card p-7 max-w-md w-full relative">
+            <button onclick="window.ClinicEngine.closeModal('modal-add-treatment')" class="absolute top-4 left-4 w-8 h-8 rounded-xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-colors">✕</button>
+            <h3 class="text-2xl font-black text-white mb-2 font-tajawal">إضافة علاج مركزي جديد</h3>
+            <p class="text-xs text-gray-400 mb-5 font-tajawal">سيتزامن العلاج وسعره تلقائياً في قائمة هواتف الأطباء فور الحفظ</p>
+            <form onsubmit="event.preventDefault(); window.ClinicEngine.confirmCreateTreatment();">
+                <label class="lbl">اسم العلاج / الإجراء الطبي</label>
+                <input type="text" id="new-trt-name" class="inp mb-3 font-bold" placeholder="مثال: زراعة أسنان فورية" required>
+                <label class="lbl">السعر الافتراضي (IQD)</label>
+                <input type="number" id="new-trt-price" class="inp mb-6 font-mono text-cyan-400" placeholder="25000" min="0" required>
+                <button type="submit" class="btn btn-primary w-full py-3.5 text-sm font-bold">✓ حفظ وإدراج في الكتالوج</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Add Debt Record -->
+    <div id="modal-add-debt" class="modal-bd">
+        <div class="glass-doctor-card p-7 max-w-md w-full relative">
+            <button onclick="window.ClinicEngine.closeModal('modal-add-debt')" class="absolute top-4 left-4 w-8 h-8 rounded-xl bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10 transition-colors">✕</button>
+            <h3 class="text-2xl font-black text-white mb-2 font-tajawal">تسجيل دين مالي جديد</h3>
+            <form onsubmit="event.preventDefault(); window.ClinicEngine.confirmCreateDebt();">
+                <label class="lbl">اسم المريض المدين</label>
+                <input type="text" id="new-debt-patient" class="inp mb-3 font-bold" placeholder="اسم المريض" required>
+                <label class="lbl">رقم هاتف المريض</label>
+                <input type="tel" id="new-debt-phone" class="inp mb-3 font-mono" placeholder="07XXXXXXXXX" required>
+                <label class="lbl">مبلغ الدين المتبقي</label>
+                <input type="number" id="new-debt-amount" class="inp mb-6 font-mono text-pink-500 font-bold" placeholder="0" min="1" required>
+                <button type="submit" class="btn btn-primary w-full py-3.5 text-sm font-bold">✓ قيد الدين في السجل</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: System Alert & Confirm -->
+    <div id="modal-sys-alert" class="modal-bd">
+        <div class="glass-doctor-card p-7 max-w-sm w-full text-center">
+            <div class="text-5xl mb-3">🔔</div>
+            <h4 id="sys-alert-title" class="text-xl font-black text-white mb-2 font-tajawal">تنبيه النظام</h4>
+            <p id="sys-alert-msg" class="text-gray-300 text-sm mb-6 font-tajawal leading-relaxed"></p>
+            <button class="btn btn-primary w-full py-3" onclick="window.DialogEngine.resolveAlert()">حسناً</button>
+        </div>
+    </div>
+
+    <div id="modal-sys-confirm" class="modal-bd">
+        <div class="glass-doctor-card p-7 max-w-md w-full text-center">
+            <div class="text-5xl mb-3 text-yellow-400">⚠️</div>
+            <h4 id="sys-confirm-title" class="text-xl font-black text-white mb-2 font-tajawal">تأكيد الإجراء</h4>
+            <p id="sys-confirm-msg" class="text-gray-300 text-sm mb-6 font-tajawal leading-relaxed"></p>
+            <div class="flex gap-3">
+                <button class="btn btn-ghost flex-1 py-3" onclick="window.DialogEngine.resolveConfirm(false)">إلغاء</button>
+                <button class="btn btn-danger flex-1 py-3" onclick="window.DialogEngine.resolveConfirm(true)">تأكيد ومتابعة</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Execution Pipeline -->
+    <script src="security.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="app.js"></script>
+
+    <!-- PWA Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(() => {});
+            });
+        }
+    </script>
+</body>
+</html>
