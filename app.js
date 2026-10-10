@@ -1,5 +1,5 @@
 /* ==================================================================
-   MEDINEXUS PRO — Master Clinic Control Engine & Gateway Architecture
+   MEDINEXUS PRO — Master Clinic Control Engine & Gateway
    ================================================================== */
 
 (function () {
@@ -33,13 +33,11 @@
         treatments: [],
         sessions: [],
         debts: [],
-        activities: [],
-        generatedMessage: '',
-        lastPatientPhone: ''
+        activities: []
     };
 
-    // ==================== TOAST NOTIFICATION DISPATCHER ====================
-    function toast(msg, type = 'info', duration = 3200) {
+    // ==================== TOAST NOTIFICATIONS ====================
+    function toast(msg, type = 'info', duration = 3500) {
         try {
             const wrap = $('#toast-wrap');
             if (!wrap) return;
@@ -97,7 +95,7 @@
     };
     window.DialogEngine = DialogEngine;
 
-    // Viewport Helpers
+    // Viewport & Drawer Helpers
     function openModal(id) {
         const el = document.getElementById(id);
         if (el) el.style.display = 'flex';
@@ -115,14 +113,14 @@
         $('#drawer-overlay')?.classList.remove('show');
     }
 
-    // Security Context Exporter for security.js
+    // Context for security.js
     function getCurrentUserContext() {
         if (State.currentUser) return State.currentUser;
         return { name: 'زائر / شاشة الدخول', role: 'guest', username: 'guest' };
     }
 
     function showSecurityWarning(type) {
-        toast(`⚠️ تنبيه أمني: تم رصد ومنع [${type}] وتسجيل المحاولة في سجل الحركات!`, 'error', 4000);
+        toast(`⚠️ تنبيه أمني: تم رصد ومنع [${type}] وتسجيل المحاولة في سجل الحركات!`, 'error', 4500);
     }
 
     // ==================== 1. GLOBAL LOGIN GATEWAY ====================
@@ -132,12 +130,12 @@
         const submitBtn = $('#btn-login-submit');
 
         if (!username || !password) {
-            toast('يرجى ملء جميع الحقول', 'error');
+            toast('يرجى إدخال اسم المستخدم وكلمة المرور', 'error');
             return;
         }
 
         submitBtn.disabled = true;
-        submitBtn.textContent = 'جارِ التحقق والمصادقة...';
+        submitBtn.textContent = 'جارِ التحقق من السحابة...';
 
         try {
             // A. Check for Master Admin Credentials
@@ -150,12 +148,10 @@
                 localStorage.setItem('medinexus_session', JSON.stringify(State.currentUser));
                 enterAppSession('admin');
                 toast('مرحباً بك أيها المدير العام (Master Admin) 👋', 'success');
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'دخول إلى النظام';
                 return;
             }
 
-            // B. Check for Doctor Credentials in Firebase
+            // B. Check for Doctor Credentials in Firestore
             const doctorData = await window.MedicalFirebase.verifyDoctorCredentials(username, password);
 
             State.currentUser = {
@@ -172,7 +168,7 @@
             toast(`أهلاً بك دكتور ${doctorData.name} 👋`, 'success');
 
         } catch (err) {
-            toast(err.message || 'بيانات الدخول غير صحيحة!', 'error', 3800);
+            toast(err.message || 'بيانات الدخول غير صحيحة!', 'error', 4000);
         } finally {
             submitBtn.disabled = false;
             submitBtn.textContent = 'دخول إلى النظام';
@@ -243,7 +239,7 @@
         window.scrollTo({ top: 0, behavior: 'instant' });
     }
 
-    // ==================== 2. ADMIN MODULE: FINANCES ====================
+    // ==================== 2. ADMIN: FINANCIAL OVERVIEW ====================
     function renderFinances() {
         const daily = Number(State.finances.dailyTotal) || 0;
         const monthly = Number(State.finances.monthlyTotal) || 0;
@@ -262,20 +258,20 @@
         }
 
         const ok = await DialogEngine.confirm(
-            `هل تريد بالتأكيد إجراء الترحيل اليومي؟\nسيتم نقل مبلغ (${fmt(daily)} IQD) إلى الإيراد الشهري وتصفير رصيد اليوم ليبدأ يوماً جديداً.`,
+            `هل تريد بالتأكيد ترحيل مبلغ اليوم (${fmt(daily)} IQD) إلى الإيراد الشهري وتصفير عداد اليوم؟`,
             'الترحيل المالي اليومي'
         );
         if (!ok) return;
 
         try {
             await window.MedicalFirebase.transferDailyRevenueCloud(daily, State.finances.monthlyTotal);
-            toast('تم إجراء الترحيل اليومي وتصفير رصيد اليوم بنجاح ✓', 'success');
+            toast('تم إجراء الترحيل وتصفير إيراد اليوم بنجاح ✓', 'success');
         } catch (e) {
-            toast('حدث خطأ أثناء ترحيل الإيرادات', 'error');
+            toast('حدث خطأ أثناء ترحيل الإيرادات: ' + e.message, 'error');
         }
     }
 
-    // ==================== 3. ADMIN MODULE: DOCTORS MANAGEMENT ====================
+    // ==================== 3. ADMIN: DOCTOR MANAGEMENT ====================
     function renderDoctors() {
         const grid = $('#doctors-cards-grid');
         if (!grid) return;
@@ -360,16 +356,16 @@
 
         const actionText = currentStatus ? 'تجميد وإيقاف جلسة' : 'إعادة تفعيل جلسة';
         const ok = await DialogEngine.confirm(
-            `هل تؤكد ${actionText} الطبيب "${targetDoc.name}"؟\n${currentStatus ? 'سيتم حظر تسجيل دخوله ومنعه من حفظ الجلسات فوراً.' : 'سيتم السماح له بتسجيل الدخول والعمل مجدداً.'}`,
-            'مفتاح إيقاف الجلسة (Session Kill Switch)'
+            `هل تؤكد ${actionText} الطبيب "${targetDoc.name}"؟`,
+            'مفتاح إيقاف الجلسة'
         );
         if (!ok) return;
 
         try {
             await window.MedicalFirebase.toggleDoctorSessionStatus(doctorId, currentStatus);
-            toast(`تم ${currentStatus ? 'تجميد جلسة' : 'تفعيل'} الطبيب بنجاح`, currentStatus ? 'warn' : 'success');
+            toast(`تم ${currentStatus ? 'تجميد جلسة' : 'تفعيل'} الطبيب بنجاح ✓`, currentStatus ? 'warn' : 'success');
         } catch (e) {
-            toast('تعذر تحديث حالة الطبيب', 'error');
+            toast('تعذر تحديث حالة الطبيب في السحابة: ' + e.message, 'error');
         }
     }
 
@@ -387,10 +383,10 @@
 
         const listEl = $('#modal-doc-patients-list');
         if (docSessions.length === 0) {
-            listEl.innerHTML = `<div class="p-6 text-center text-gray-500 text-xs">لم يقم هذا الطبيب بتسجيل أي جلسات بعد.</div>`;
+            listEl.innerHTML = `<div class="p-6 text-center text-gray-500 text-xs font-tajawal">لم يقم هذا الطبيب بتسجيل أي جلسات بعد.</div>`;
         } else {
             listEl.innerHTML = docSessions.map(s => `
-                <div class="p-3.5 rounded-xl bg-black/40 border border-white/5 flex items-center justify-between text-xs">
+                <div class="p-3.5 rounded-xl bg-black/40 border border-white/5 flex items-center justify-between text-xs font-tajawal">
                     <div>
                         <div class="font-bold text-white text-sm">${escapeHtml(s.patientName)}</div>
                         <div class="text-[11px] text-gray-400 mt-0.5">العلاج: ${escapeHtml(s.treatmentName)} • هاتف: ${escapeHtml(s.patientPhone)}</div>
@@ -430,17 +426,18 @@
         try {
             await window.MedicalFirebase.addDoctorCloud(name, phone, username, password);
             closeModal('modal-add-doctor');
-            toast(`تم إنشاء وتفعيل حساب الطبيب "${name}" بنجاح ✓`, 'success');
+            toast(`تم حفظ الطبيب "${name}" في قاعدة البيانات بنجاح ✓`, 'success');
         } catch (err) {
-            toast(err.message || 'حدث خطأ أثناء إنشاء حساب الطبيب', 'error');
+            toast(err.message || 'حدث خطأ أثناء حفظ الطبيب في Firestore', 'error');
         }
     }
 
-    // ==================== 4. ADMIN MODULE: TREATMENTS CATALOG ====================
+    // ==================== 4. ADMIN: TREATMENTS (REAL-TIME SYNC) ====================
     function renderTreatments() {
         const tbody = $('#treatments-table-body');
         const select = $('#pt-treatment-select');
 
+        // 1. Render Admin Table
         if (tbody) {
             if (State.treatments.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-gray-500">لا توجد علاجات في الكتالوج المركزي</td></tr>`;
@@ -460,7 +457,7 @@
             }
         }
 
-        // Real-Time Sync to Doctor Mobile Dropdown
+        // 2. Real-Time Sync to Doctor Portal Dropdown (INSTANT SYNC)
         if (select) {
             const currentSelected = select.value;
             select.innerHTML = '<option value="">-- اختر نوع العلاج من الكتالوج المركزي --</option>' +
@@ -491,9 +488,9 @@
         try {
             await window.MedicalFirebase.addTreatmentCloud(name, price);
             closeModal('modal-add-treatment');
-            toast(`تمت إضافة علاج "${name}" بنجاح ✓`, 'success');
+            toast(`تم حفظ علاج "${name}" في السحابة وتحديث هواتف الأطباء فورياً ✓`, 'success');
         } catch (e) {
-            toast('تعذر إضافة العلاج', 'error');
+            toast('تعذر إضافة العلاج: ' + e.message, 'error');
         }
     }
 
@@ -501,18 +498,18 @@
         const trt = State.treatments.find(t => t.id === id);
         if (!trt) return;
 
-        const ok = await DialogEngine.confirm(`هل أنت متأكد من حذف علاج "${trt.name}" من الكتالوج المركزي؟`, 'حذف علاج');
+        const ok = await DialogEngine.confirm(`هل أنت متأكد من حذف علاج "${trt.name}"؟`, 'حذف علاج');
         if (!ok) return;
 
         try {
             await window.MedicalFirebase.deleteTreatmentCloud(id);
-            toast('تم حذف العلاج من الكتالوج', 'warn');
+            toast('تم حذف العلاج من الكتالوج المركزي', 'warn');
         } catch (e) {
-            toast('تعذر حذف العلاج', 'error');
+            toast('تعذر حذف العلاج: ' + e.message, 'error');
         }
     }
 
-    // ==================== 5. ADMIN MODULE: ACTIVITIES & BREACHES ====================
+    // ==================== 5. ADMIN: ACTIVITIES LOG ====================
     function renderActivities() {
         const container = $('#activities-log-container');
         if (!container) return;
@@ -525,7 +522,7 @@
         }
 
         if (list.length === 0) {
-            container.innerHTML = `<div class="p-8 text-center text-gray-500 text-xs font-tajawal">لا توجد حركات أو نشاطات مسجلة في هذا التصنيف ✓</div>`;
+            container.innerHTML = `<div class="p-8 text-center text-gray-500 text-xs font-tajawal">لا توجد حركات مسجلة حالياً ✓</div>`;
             return;
         }
 
@@ -564,7 +561,7 @@
         renderActivities();
     }
 
-    // ==================== 6. ADMIN MODULE: DEBTS REGISTRY ====================
+    // ==================== 6. ADMIN: DEBTS ====================
     function renderDebts(filterQuery = '') {
         const tbody = $('#debts-table-body');
         const fullContainer = $('#full-debts-container');
@@ -578,7 +575,7 @@
 
         if (list.length === 0) {
             tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-gray-500 font-tajawal">سجل الديون خالي تماماً ✓</td></tr>`;
-            if (fullContainer) fullContainer.innerHTML = `<div class="p-8 text-center text-gray-500">لا توجد ديون مسجلة</div>`;
+            if (fullContainer) fullContainer.innerHTML = `<div class="p-8 text-center text-gray-500 font-tajawal">لا توجد ديون مسجلة</div>`;
             return;
         }
 
@@ -656,7 +653,7 @@
             closeModal('modal-add-debt');
             toast(`تم تسجيل دين بقيمة ${fmt(amount)} IQD للمريض "${patient}"`, 'success');
         } catch (e) {
-            toast('تعذر تسجيل الدين', 'error');
+            toast('تعذر تسجيل الدين: ' + e.message, 'error');
         }
     }
 
@@ -674,11 +671,11 @@
             await window.MedicalFirebase.payDebtCloud(debtId, amount, currentRem);
             toast(`تم تسديد ${fmt(amount)} IQD بنجاح ✓`, 'success');
         } catch (e) {
-            toast('حدث خطأ أثناء معالجة التسديد', 'error');
+            toast('حدث خطأ أثناء معالجة التسديد: ' + e.message, 'error');
         }
     }
 
-    // ==================== 7. ADMIN MODULE: SESSIONS ARCHIVE ====================
+    // ==================== 7. ADMIN: SESSIONS HISTORY ====================
     function renderSessions() {
         const tbody = $('#all-sessions-table-body');
         if (!tbody) return;
@@ -721,7 +718,7 @@
         toast('تم تصدير سجل الجلسات بنجاح (CSV) ✓', 'success');
     }
 
-    // ==================== 8. DOCTOR PORTAL & WHATSAPP INTEGRATION ====================
+    // ==================== 8. DOCTOR PORTAL & WHATSAPP FLOW ====================
     function renderDoctorDashboard() {
         if (!State.currentUser || State.currentUser.role !== 'doctor') return;
 
@@ -742,12 +739,12 @@
             `;
         } else {
             list.innerHTML = mySessionsToday.map(s => `
-                <div class="p-3.5 rounded-2xl bg-black/40 border border-white/10 hover:border-cyan-400/30 transition-all">
+                <div class="p-3.5 rounded-2xl bg-black/40 border border-white/10 hover:border-cyan-400/30 transition-all font-tajawal">
                     <div class="flex items-center justify-between mb-1.5">
                         <span class="font-bold text-white text-sm">${escapeHtml(s.patientName)}</span>
                         <span class="font-mono font-black text-emerald-400 text-sm">${fmt(s.finalPrice)} IQD</span>
                     </div>
-                    <div class="text-xs text-gray-300 font-tajawal">العلاج: ${escapeHtml(s.treatmentName)}</div>
+                    <div class="text-xs text-gray-300">العلاج: ${escapeHtml(s.treatmentName)}</div>
                     <div class="flex items-center justify-between mt-2 pt-2 border-t border-white/5 text-[10px] text-gray-400 font-mono">
                         <span>جلسة 2: ${formatDate(s.session2Date)}</span>
                         <span>${formatDate(s.createdAt).slice(11)}</span>
@@ -790,7 +787,7 @@
         }
     }
 
-    // 🚀 FIXED PATIENT SESSION SUBMISSION & AUTOMATIC WHATSAPP INTEGRATION
+    // 🚀 SUBMIT PATIENT SESSION (FAST, ZERO HANG, AUTO WHATSAPP REDIRECT)
     async function submitPatientSession() {
         if (!State.currentUser || State.currentUser.role !== 'doctor') {
             toast('جلسة الطبيب غير صالحة', 'error');
@@ -816,7 +813,7 @@
         const formattedNow = formatDate(nowIso);
         const formattedSession2 = formatDate(session2Date);
 
-        // Required Exact Message Template (قالب الرسالة المطلوب نصاً)
+        // Required Exact Template Format
         const notificationText = 
 `مرحباً بك في عيادة الدكتور ${State.currentUser.name}
 اسم المريض: ${patientName}
@@ -840,41 +837,39 @@
 
         const submitBtn = $('#btn-submit-patient');
         submitBtn.disabled = true;
-        submitBtn.textContent = 'جارِ حفظ الجلسة...';
+        submitBtn.textContent = 'جارِ الحفظ في قاعدة البيانات...';
 
         try {
-            // Reliable Fast Async Firestore Write (Won't Hang)
+            // Guaranteed Firestore Write
             await window.MedicalFirebase.recordPatientSessionCloud(sessionPayload);
 
             closeAddPatientFullScreen();
             renderDoctorDashboard();
-            toast('تم حفظ الجلسة بنجاح ✓ جارِ فتح تطبيق WhatsApp...', 'success');
+            toast('تم حفظ الجلسة في Firestore بنجاح ✓ جارِ فتح تطبيق WhatsApp...', 'success');
 
-            // Trigger Direct WhatsApp Message to Patient Phone
-            triggerDirectWhatsApp(patientPhone, notificationText);
+            // Automatic WhatsApp Dispatch
+            triggerWhatsAppDispatch(patientPhone, notificationText);
 
         } catch (err) {
-            console.error('Session save error:', err);
-            toast('حدث خطأ أثناء معالجة الجلسة، حاول ثانية.', 'error');
+            console.error('Session Save Error:', err);
+            toast('فشل الحفظ في السحابة: ' + (err.message || 'خطأ غير متوقع'), 'error');
         } finally {
             submitBtn.disabled = false;
             submitBtn.textContent = '✓ حفظ الجلسة وإرسال إشعار WhatsApp فوراً';
         }
     }
 
-    function triggerDirectWhatsApp(patientPhone, message) {
+    function triggerWhatsAppDispatch(patientPhone, message) {
         let phone = String(patientPhone || '').replace(/\D/g, '');
-        // Standardize Iraqi phone format
         if (phone.startsWith('07')) phone = '964' + phone.slice(1);
         if (phone.startsWith('7')) phone = '964' + phone;
 
         const encodedMsg = encodeURIComponent(message);
         const waUrl = phone ? `https://wa.me/${phone}?text=${encodedMsg}` : `https://wa.me/?text=${encodedMsg}`;
 
-        // Attempt instant window open; fallback to prompt link
         try {
-            const win = window.open(waUrl, '_blank');
-            if (!win || win.closed || typeof win.closed === 'undefined') {
+            const w = window.open(waUrl, '_blank');
+            if (!w || w.closed || typeof w.closed === 'undefined') {
                 window.location.href = waUrl;
             }
         } catch (e) {
@@ -882,12 +877,12 @@
         }
     }
 
-    // ==================== 9. INITIALIZATION PIPELINE ====================
+    // ==================== 9. SYSTEM LIFECYCLE ====================
     async function initSystem() {
         // Initialize Firebase
         await window.MedicalFirebase.init();
 
-        // Check if existing session in storage
+        // Restore Session
         const cachedSession = localStorage.getItem('medinexus_session');
         if (cachedSession) {
             try {
@@ -904,6 +899,7 @@
             renderFinances();
         });
 
+        // Treatments Catalog (Syncs both table and doctor dropdown instantly!)
         window.MedicalFirebase.subscribeTreatments(list => {
             State.treatments = list || [];
             renderTreatments();
@@ -913,7 +909,7 @@
             State.doctors = list || [];
             renderDoctors();
 
-            // Real-time security verification for active doctor
+            // Real-time freeze security check
             if (State.currentUser && State.currentUser.role === 'doctor') {
                 const liveMe = State.doctors.find(d => d.uid === State.currentUser.uid);
                 if (liveMe && liveMe.isActive === false) {
@@ -960,10 +956,10 @@
             }
         });
 
-        console.log('%c🚀 MEDINEXUS PRO Master Enterprise Core Ready', 'color:#00F0FF;font-weight:900');
+        console.log('%c🚀 MEDINEXUS PRO Real-Time Synchronizer Active', 'color:#00F0FF;font-weight:900');
     }
 
-    // Public Surface Bindings
+    // Public Surface API
     window.ClinicEngine = {
         openDrawer, closeDrawer,
         handleGlobalLogin, handleGlobalLogout,
